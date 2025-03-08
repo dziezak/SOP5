@@ -7,7 +7,7 @@
 int main() {
     int pipefd[2];
     //char buffer[100];
-    const char *msg = "To jest dlugi tekst przekraczajacy PIPE_BUF...\n";
+    const char *msg = "To jest dlugi tekst przekraczajacy PIPE_BUF... BRUUH Ciekawe czy to sie kiedykolwiek wywali";
 
 
     if (pipe(pipefd) == -1) {
