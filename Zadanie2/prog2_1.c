@@ -24,56 +24,64 @@ void initialize_pipes(int pipes[MAX_PLAYERS][2][2], int n){
 void close_unused_pipes(int pipes[MAX_PLAYERS][2][2], int n, int process_id, int is_server){
     for(int i=0; i<n; i++){
         if(i != process_id){
-            printf("Closing unused pipes for process %d (not %d)\n", i, process_id);
+            //printf("Closing unused pipes for process %d (not %d)\n", i, process_id);
             close(pipes[i][0][0]);
             close(pipes[i][0][1]);
             close(pipes[i][1][0]);
             close(pipes[i][1][1]);
         } else if(is_server){
-            printf("Server closing pipes for player %d\n", i);
+            //printf("Server closing pipes for player %d\n", i);
             close(pipes[i][1][0]);
             close(pipes[i][0][1]);
         }else{
-            printf("Player %d closing pipes\n", process_id);
+            //printf("Player %d closing pipes\n", process_id);
             close(pipes[i][0][0]);
             close(pipes[i][1][1]);
         }
     }
 }
 
-void player_process(int player_id, int read_fd, int write_fd, int m){
-    srand(time(NULL) ^ (getpid() << 16));
-    int cards[m];
-    for(int i=0; i<m; i++) 
-        cards[i] = i+1;
-    for(int round = 0; round < m; round++){
-        char message[MAX_MESSAGE_SIZE];
 
-        if(read(read_fd, message, MAX_MESSAGE_SIZE) <= 0){
-            fprintf(stderr, "Player %d: Server disconected. Exiting. \n", player_id);
+void player_process(int player_id, int read_fd, int write_fd, int m) {
+    srand(time(NULL) ^ (getpid() << 16)); // Losowe ziarno dla każdego gracza
+    int cards[m];
+    for (int i = 0; i < m; i++) {
+        cards[i] = i + 1; // Przydzielenie kart graczowi
+    }
+
+    for (int round = 0; round < m; round++) {
+        char message[MAX_MESSAGE_SIZE] = {0};
+
+        // Oczekiwanie na wiadomość "new_round" od serwera
+        if (read(read_fd, message, MAX_MESSAGE_SIZE) <= 0) {
+            fprintf(stderr, "Player %d: Server disconnected. Exiting.\n", player_id);
             break;
         }
 
-        printf("Player %d received: %s\n", player_id, message);
-
-        int card_index = rand() % ( m - round );
+        // Wybór losowej karty
+        int card_index = rand() % (m - round);
         int card_value = cards[card_index];
 
-        for(int i=card_index; i<m - round - 1; i++){
-            cards[i] = cards[i+1];
+        // Usunięcie użytej karty
+        for (int i = card_index; i < m - round - 1; i++) {
+            cards[i] = cards[i + 1];
         }
 
+        // Wysłanie karty do serwera
         snprintf(message, MAX_MESSAGE_SIZE, "%d", card_value);
-        printf("Player %d sends card: %d\n", player_id, card_value);
-        if(write(write_fd, message, MAX_MESSAGE_SIZE) <=0){
-            fprintf(stderr, "Player %d: Server disconnected. Exiting \n", player_id);
+        printf("Player %d (PID %d) sends card: %d\n", player_id, getpid(), card_value);
+
+        if (write(write_fd, message, MAX_MESSAGE_SIZE) <= 0) {
+            fprintf(stderr, "Player %d: Server disconnected. Exiting.\n", player_id);
             break;
         }
     }
+
     close(read_fd);
     close(write_fd);
     exit(0);
 }
+
 
 int main(int argc, char *argv[]){
     if(argc != 3){
