@@ -15,19 +15,26 @@ void print_fd(const char *msg, int fds[2]){
 
 void child_process(int read_fd, int write_fd){
     char buffer[10];
+    srand(getpid());
+    int random_num = rand() % 100;
+    snprintf(buffer, sizeof(buffer), "%d", random_num);
 
-    int bytes_read = read(read_fd, buffer, sizeof(buffer) -1);
-    if(bytes_read > 0){
-        buffer[bytes_read] = '\0';
-        printf("PID %d recived: %s\n", getpid(), buffer);
-        int bytes_written = write(write_fd, buffer, bytes_read);
-        if(bytes_written < 0){
-            perror("write");
+    printf("PID %d sending: %s\n", getpid(), buffer);
+    int bytes_written = write(write_fd, buffer, strlen(buffer)+1);
+    if(bytes_written < 0){
+        perror("write");
+    }
+
+    if(read_fd != -1){
+        int bytes_read = read(read_fd, buffer, sizeof(buffer) -1);
+        if(bytes_read > 0){
+            buffer[bytes_read] = '\0';
+            printf("PID %d recived: %s\n", getpid(), buffer);
+        }else if( bytes_read == 0){
+            printf("PID %d: Pipe closed, exiting\n", getpid());
+        }else{
+            perror("read");
         }
-    }else if(bytes_read == 0){
-        printf("PID = %d, Pipe closed, exiting\n", getpid());
-    }else{
-        perror("read");
     }
     close(read_fd);
     close(write_fd);
@@ -59,9 +66,7 @@ int main(){
         close(pipe2[0]);
         close(pipe3[0]);
         close(pipe3[1]);
-
         child_process(pipe1[0], pipe2[1]);
-
     }
 
     if((pid2 = fork()) == -1){
@@ -74,7 +79,6 @@ int main(){
         close(pipe3[0]);
         close(pipe1[0]);
         close(pipe1[1]);
-        
         child_process(pipe2[0], pipe3[1]);
     }
 
@@ -83,15 +87,12 @@ int main(){
     close(pipe2[1]);
     close(pipe3[1]);
 
-    //printf("Parent: closed unused pipes/n");
     int random_num = rand() % 100;
     char msg[10];
     snprintf(msg, sizeof(msg), "%d", random_num);
-    printf("Mesage that should be send: %s\n", msg);
-    printf("Parent sending message");
+    printf("Parent sending: %s\n", msg);
 
-    int msg_len = strlen(msg) +1;
-    if(write(pipe1[1], msg, msg_len) < 0){
+    if(write(pipe1[1], msg, strlen(msg)+1) < 0){
         perror("write");
     }
     close(pipe1[1]);

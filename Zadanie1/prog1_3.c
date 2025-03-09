@@ -15,29 +15,32 @@ void print_fd(const char *msg, int fds[2]){
 
 void child_process(int read_fd, int write_fd){
     char buffer[10];
-    srand(getpid());
-    int random_num = rand() % 100;
-    snprintf(buffer, sizeof(buffer), "%d", random_num);
 
-    printf("PID %d sending: %s\n", getpid(), buffer);
-    int bytes_written = write(write_fd, buffer, strlen(buffer)+1);
-    if(bytes_written < 0){
-        perror("write");
-    }
-
-    if(read_fd != -1){
+    while(1){
         int bytes_read = read(read_fd, buffer, sizeof(buffer) -1);
         if(bytes_read > 0){
             buffer[bytes_read] = '\0';
             printf("PID %d recived: %s\n", getpid(), buffer);
-        }else if( bytes_read == 0){
-            printf("PID %d: Pipe closed, exiting\n", getpid());
+
+            int bytes_written = write(write_fd, buffer, strlen(buffer)+1);
+            if(bytes_written < 0){
+                perror("write");
+            }
+        }else if(bytes_read == 0){
+            printf("PID = %d, Pipe closed, exiting\n", getpid());
+            break;
         }else{
             perror("read");
+            break;
         }
     }
     close(read_fd);
     close(write_fd);
+    exit(0);
+}
+
+void sigint_handler(int sig){
+    printf("\nProgram interrupted. Exiting gracefully\n");
     exit(0);
 }
 
@@ -54,7 +57,8 @@ int main(){
     print_fd("Pipe3", pipe3);
 
     pid_t pid1, pid2;
-    srand(time(NULL));
+    //srand(time(NULL));
+    signal(SIGINT, sigint_handler);
     
     if((pid1 = fork()) == -1){
         perror("fork()");
@@ -66,6 +70,7 @@ int main(){
         close(pipe2[0]);
         close(pipe3[0]);
         close(pipe3[1]);
+
         child_process(pipe1[0], pipe2[1]);
     }
 
@@ -79,6 +84,7 @@ int main(){
         close(pipe3[0]);
         close(pipe1[0]);
         close(pipe1[1]);
+        
         child_process(pipe2[0], pipe3[1]);
     }
 
@@ -87,27 +93,33 @@ int main(){
     close(pipe2[1]);
     close(pipe3[1]);
 
-    int random_num = rand() % 100;
-    char msg[10];
-    snprintf(msg, sizeof(msg), "%d", random_num);
-    printf("Parent sending: %s\n", msg);
+    //printf("Parent: closed unused pipes/n");
+    char msg[10] = "1";
+    printf("Parent sending\n");
 
     if(write(pipe1[1], msg, strlen(msg)+1) < 0){
         perror("write");
     }
-    close(pipe1[1]);
-    
-    char buffer[10];
-    int bytes_read = read(pipe3[0], buffer, sizeof(buffer) -1);
-    if(bytes_read > 0){
-        buffer[bytes_read] = '\0';
-        printf("Parent recived final value: %s\n", buffer);
-    }else if(bytes_read == 0){
-        printf("Parent: Pipe closed, no data recived\n");
-    }else{
-        perror("read");
+    while(1){
+        int bytes_read = read(pipe3[0], msg, sizeof(msg) -1);
+        if(bytes_read > 0){
+            msg[bytes_read] = '\0';
+            printf("Parent recived: %s\n", msg);
+            printf("Parent sending back: %s\n", msg);
+            if(write(pipe1[1], msg, strlen(msg)+1) < 0){
+                perror("write");
+                break;
+            }
+        }else if(bytes_read == 0){
+            printf("Parent: Pipe closed, no data recived\n");
+            break;
+        }else{
+            perror("read");
+            break;
+        }
     }
 
+    close(pipe1[1]);
     close(pipe3[0]);
 
     wait(NULL);
