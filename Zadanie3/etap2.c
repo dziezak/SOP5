@@ -6,6 +6,11 @@
 #include <string.h>
 
 #define MSG_SIZE 50
+#define NUM_STAGES 4
+
+int losuj(int min, int max) {
+    return min + rand() % (max - min + 1);
+}
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
@@ -25,13 +30,11 @@ int main(int argc, char* argv[]) {
     int students_to_teacher[2];  
     pid_t student_pids[n];      
 
-    
     if (pipe(students_to_teacher) == -1) {
         perror("pipe");
         exit(1);
     }
 
-    
     for (int i = 0; i < n; i++) {
         if (pipe(teacher_to_students[i]) == -1) {
             perror("pipe");
@@ -48,40 +51,66 @@ int main(int argc, char* argv[]) {
             close(teacher_to_students[i][1]);
             close(students_to_teacher[0]); 
 
-            char buffer[MSG_SIZE];
-            read(teacher_to_students[i][0], buffer, MSG_SIZE);
-            printf("Student %d (PID %d): Otrzymał wiadomość -> %s\n", i + 1, getpid(), buffer);
+            for(int stage = 1; stage <= NUM_STAGES; stage++){
+                int t = losuj(100, 500);
+                //usleep(t * 1000);  // usleep w mikrosekundach
 
-            char response[MSG_SIZE];
-            snprintf(response, MSG_SIZE, "Student %d (PID %d): HERE", i + 1, getpid());
-            write(students_to_teacher[1], response, strlen(response) + 1);            
+                int q = losuj(1, 20);
+                int k = stage * 100;
+                int wynik = k + q;
 
+                char response[MSG_SIZE];
+                snprintf(response, MSG_SIZE, "%d %d", getpid(), wynik);
+                write(students_to_teacher[1], response, strlen(response)+1);
 
+                char buffer[MSG_SIZE];
+                read(teacher_to_students[i][0], buffer, MSG_SIZE);
+                printf("Student %d (PID %d): Otrzymał wiadomość -> %s\n", i + 1, getpid(), buffer);
+                if(strcmp(buffer, "PASS") == 0){
+                    printf("Student %d (PID %d): Stage %d PASSED\n", i + 1, getpid(), stage);
+                } else {
+                    printf("Student %d (PID %d): Stage %d FAILED\n", i + 1, getpid(), stage);
+                    stage--; // Decrement stage, but avoid infinite loop
+                }
+            }
+
+            printf("Student %d (PID %d): I NAIL IT!!!\n", i + 1, getpid());
             close(teacher_to_students[i][0]);
             close(students_to_teacher[1]);
             exit(0);
-        }else{
+        } else {
             student_pids[i] = pid;
-            //dodajemy tutaj
             close(teacher_to_students[i][0]);
         }
     }
 
     close(students_to_teacher[1]);
 
-    for (int i = 0; i < n; i++) {
-        //close(teacher_to_students[i][0]);
-        char message[MSG_SIZE];
-        snprintf(message, MSG_SIZE, "Teacher: Is student %d (PID %d) here?", i + 1, student_pids[i]);
-        write(teacher_to_students[i][1], message, strlen(message) + 1);
-        printf("Teacher: Wysłano do studenta %d -> %s\n", i + 1, message); 
-        close(teacher_to_students[i][1]);
-    }
-
+    // Teacher's part
     for (int i = 0; i < n; i++) {
         char buffer[MSG_SIZE];
         read(students_to_teacher[0], buffer, MSG_SIZE);
-        printf("Teacher: Otrzymano od studenta -> %s\n", buffer);
+
+        int student_pid, wynik;
+        sscanf(buffer, "%d %d", &student_pid, &wynik);
+
+        int d = losuj(1, 20) + (i / n + 1) * 10;
+        char message[MSG_SIZE];
+
+        if (wynik >= d) {
+            snprintf(message, MSG_SIZE, "PASS");
+            printf("Teacher: Student %d finished stage %d\n", student_pid, i / n + 1);
+        } else {
+            snprintf(message, MSG_SIZE, "FAIL");
+            printf("Teacher: Student %d needs to fix stage %d\n", student_pid, i / n + 1);
+        }
+
+        for (int j = 0; j < n; j++) {
+            if (student_pids[j] == student_pid) {
+                write(teacher_to_students[j][1], message, strlen(message) + 1);
+                break;
+            }
+        }
     }
 
     close(students_to_teacher[0]);
