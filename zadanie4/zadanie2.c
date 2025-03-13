@@ -5,9 +5,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#define N 3  // Liczba procesów w każdej grupie
-#define MAX_HP 100
-#define MAX_DAMAGE 20
+#define N 3              // Liczba procesów w każdej grupie
+#define MAX_HP 100       // Początkowe HP każdego procesu
+#define MAX_DAMAGE 20    // Maksymalny damage zadawany przez proces
 
 typedef struct {
     int hp;
@@ -20,23 +20,34 @@ void process_fight(int read_fd, int write_fd, int id) {
 
     while (my_data.hp > 0) {
         // Otrzymanie obrażeń od przeciwnika
-        if (read(read_fd, &enemy_data, sizeof(ProcessData)) > 0) {
-            int damage = rand() % MAX_DAMAGE + 1;
-            my_data.hp -= damage;
-            printf("Proces %d otrzymał %d obrażeń! HP: %d\n", my_data.id, damage, my_data.hp);
+        if (read(read_fd, &enemy_data, sizeof(ProcessData)) <= 0) {
+            break;  // Jeśli nie ma już danych, kończymy proces
         }
 
-        // Jeśli nadal żyje, atakuje przeciwnika
-        if (my_data.hp > 0) {
-            int damage = rand() % MAX_DAMAGE + 1;
-            enemy_data.hp -= damage;
-            printf("Proces %d atakuje %d za %d obrażeń!\n", my_data.id, enemy_data.id, damage);
-            write(write_fd, &enemy_data, sizeof(ProcessData));
-            sleep(1);
-        } else {
+        int damage = rand() % MAX_DAMAGE + 1;
+        my_data.hp -= damage;
+        printf("Proces %d otrzymał %d obrażeń! HP: %d\n", my_data.id, damage, my_data.hp);
+
+        // Jeśli zginął, wysyłamy informację o śmierci i kończymy działanie
+        if (my_data.hp <= 0) {
             printf("Proces %d został pokonany!\n", my_data.id);
             break;
         }
+
+        // Atakujemy przeciwnika
+        damage = rand() % MAX_DAMAGE + 1;
+        enemy_data.hp -= damage;
+        printf("Proces %d atakuje %d za %d obrażeń!\n", my_data.id, enemy_data.id, damage);
+
+        // Jeśli przeciwnik zginął, nie wysyłamy dalej
+        if (enemy_data.hp > 0) {
+            write(write_fd, &enemy_data, sizeof(ProcessData));
+        } else {
+            printf("Proces %d pokonał przeciwnika %d!\n", my_data.id, enemy_data.id);
+            break;
+        }
+
+        sleep(1);
     }
 
     close(read_fd);
@@ -59,8 +70,8 @@ int main() {
     for (int i = 0; i < N; i++) {
         pids[i] = fork();
         if (pids[i] == 0) {  // Proces potomny
-            close(pipes_A_to_B[i][0]);  // Zamknięcie czytania z własnego pipe
-            close(pipes_B_to_A[i][1]);  // Zamknięcie pisania do własnego pipe
+            close(pipes_A_to_B[i][0]);  // Zamknięcie odczytu z własnego pipe
+            close(pipes_B_to_A[i][1]);  // Zamknięcie zapisu do własnego pipe
             process_fight(pipes_B_to_A[i][0], pipes_A_to_B[i][1], i);
         }
     }
@@ -69,8 +80,8 @@ int main() {
     for (int i = 0; i < N; i++) {
         pids[N + i] = fork();
         if (pids[N + i] == 0) {  // Proces potomny
-            close(pipes_B_to_A[i][0]);  // Zamknięcie czytania z własnego pipe
-            close(pipes_A_to_B[i][1]);  // Zamknięcie pisania do własnego pipe
+            close(pipes_B_to_A[i][0]);  // Zamknięcie odczytu z własnego pipe
+            close(pipes_A_to_B[i][1]);  // Zamknięcie zapisu do własnego pipe
             process_fight(pipes_A_to_B[i][0], pipes_B_to_A[i][1], N + i);
         }
     }
